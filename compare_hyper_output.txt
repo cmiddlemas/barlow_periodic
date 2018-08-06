@@ -1,0 +1,33 @@
+Parsing Barlow strings from "compare_hyper.txt"
+Working on packing: AB
+Working on particle type: 0
+Working on particle type: 1
+B Coefficient (non-normalized) = -0.22951621375977993
+Working on packing: ABC
+Working on particle type: 0
+Working on particle type: 1
+Working on particle type: 2
+B Coefficient (non-normalized) = -0.22948492877185345
+Working on packing: ABAC
+Working on particle type: 0
+Working on particle type: 1
+Working on particle type: 2
+Working on particle type: 3
+B Coefficient (non-normalized) = -0.22950049862265587
+Working on packing: ABABC
+Working on particle type: 0
+Working on particle type: 1
+Working on particle type: 2
+Working on particle type: 3
+Working on particle type: 4
+B Coefficient (non-normalized) = -0.22949743457138538
+Working on packing: ABABAC
+Working on particle type: 0
+Working on particle type: 1
+Working on particle type: 2
+Working on particle type: 3
+Working on particle type: 4
+Working on particle type: 5
+B Coefficient (non-normalized) = -0.22950574569404125
+Working on packing: ABACBC
+Working on particle type: 0

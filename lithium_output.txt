@@ -1,0 +1,12 @@
+Parsing Barlow strings from "lithium.txt"
+Working on packing: ABCBCACAB
+Working on particle type: 0
+Working on particle type: 1
+Working on particle type: 2
+Working on particle type: 3
+Working on particle type: 4
+Working on particle type: 5
+Working on particle type: 6
+Working on particle type: 7
+Working on particle type: 8
+B Coefficient (non-normalized) = -0.22950573824346066
