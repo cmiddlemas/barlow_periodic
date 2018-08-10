@@ -341,7 +341,7 @@ pub fn compute_hyperuniformity(spec: Spec, opt: &Opt) {
             .collect();
             //println!("{:?}", temp_vec);
             //.sum::<f64>();
-            b += temp_vec.iter().sum::<f64>();
+        b += temp_vec.iter().sum::<f64>();
     }
 
     println!("b is {}", b);
@@ -353,6 +353,130 @@ pub fn compute_hyperuniformity(spec: Spec, opt: &Opt) {
     b -= 4.0*PI*(2.0f64.sqrt())/(2.0*alpha*alpha);
 
     println!("B Coefficient (non-normalized) = {}", b);
+}
+
+pub fn h_hex(
+    layer_pos: Layer, // A B or C
+    layer_neg: Layer,
+    l_idx: i64, //How many layers above or below center are we?
+    max_lat_idx: i64, //How far are we going out in lattice sum?
+    alpha: f64 //exponential convergence parameter
+    ) -> f64
+{
+    use Layer::*;
+    let l_f64 = l_idx as f64;
+    
+    let offset_pos = match layer_pos {
+        A => l_f64 * *OFFSET_ALL,
+        B => l_f64 * *OFFSET_ALL + *OFFSET_B,
+        C => l_f64 * *OFFSET_ALL + *OFFSET_C,
+    };
+    
+    let offset_neg = match layer_neg {
+        A => -l_f64 * *OFFSET_ALL,
+        B => -l_f64 * *OFFSET_ALL + *OFFSET_B,
+        C => -l_f64 * *OFFSET_ALL + *OFFSET_C,
+    };
+
+    let mut h: f64 = 0.0;
+
+    for i in (0..(max_lat_idx + 1)).rev() {
+        for j in (0..(max_lat_idx + 1)).rev() {
+            // +++
+            let vec = offset_pos + (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
+            let r: f64 = na::norm(&vec);
+            h += (-alpha*r*r).exp();
+            // ++-
+            if j != 0 {
+                let vec = offset_pos + (i as f64) * *HEX_1 - (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // +-+
+            if i != 0 {
+                let vec = offset_pos - (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // +--
+            if (i != 0) && (j != 0) {
+                let vec = offset_pos - (i as f64) * *HEX_1 - (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // -++
+            if l_idx != 0 {
+                let vec = offset_neg + (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // -+-
+            if (l_idx != 0) && (j != 0) {
+                let vec = offset_neg + (i as f64) * *HEX_1 - (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // --+
+            if (l_idx != 0) && (i != 0) {
+                let vec = offset_neg - (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+            // ---
+            if (l_idx != 0) && (i != 0) && (j != 0) {
+                let vec = offset_neg - (i as f64) * *HEX_1 - (j as f64) * *HEX_2;
+                let r: f64 = na::norm(&vec);
+                h += (-alpha*r*r).exp();
+            }
+        }
+    }
+    h
+}
+
+
+pub fn compute_h(spec: Spec, opt: &Opt) {
+    let alpha = opt.alpha
+        .expect("Must supply convergence parameter alpha for h integral calculation.");
+
+    let max_lat_idx = (2.0*opt.cutoff) as i64;
+
+    let spec_len = spec.len();
+    let spec_i64 = spec_len as i64;
+
+    let mut h: f64 = 0.0; //integral of h over R3
+
+    for i in 0..spec_len {
+        println!("Working on particle type: {}", i);
+        let curr_spec = spec.shift(i);
+        let temp: Vec<f64> = (0..(max_lat_idx + 1)).rev()
+            .collect::<Vec<i64>>()
+            .par_iter()
+            .map(|&j| h_hex(
+                curr_spec.get((((j%spec_i64)+spec_i64)%spec_i64) as usize),
+                curr_spec.get((((-j%spec_i64)+spec_i64)%spec_i64) as usize),
+                j,
+                max_lat_idx,
+                alpha
+                )
+            )
+            .collect();
+        h += temp.iter().sum::<f64>();
+    }
+
+    println!("h is {}", h);
+    
+    // normalize by # of particle types
+    h /= spec_len as f64;
+   
+    // must subtract off origin contribution, not zeroed by inclusion
+    // of r anymore
+    h -= 1.0;
+
+    // account for the -1 in the definition of h
+    h -= 2.0f64.sqrt()*PI.powf(1.5)/alpha.powf(1.5);
+
+    println!("h = {}", h);
+
 }
 
 #[cfg(test)]
