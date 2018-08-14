@@ -26,6 +26,7 @@ fn main() {
             "theta" => compute_theta(layer_spec, &opt),
             "hyperuniformity" => compute_hyperuniformity(layer_spec, &opt),
             "integral" => compute_h(layer_spec, &opt),
+            "apintegral" => ap_compute_h(layer_spec, &opt),
             _ => panic!("Invalid request, or not implemented."),
         }
     }

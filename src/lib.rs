@@ -6,6 +6,8 @@ extern crate nalgebra as na;
 extern crate rayon;
 extern crate rug;
 
+mod geometry;
+
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::io::prelude::*;
@@ -14,9 +16,14 @@ use na::Vector3;
 use rayon::prelude::*;
 use std::f64::consts::PI;
 use rug::Float;
+use rug::ops::Pow;
+use geometry::APVec3;
 
 // Constant Declarations for whole crate
 const THETA_BIN_SIZE: f64 = 0.01;
+
+//From Mathematica 11.2.0
+const PI_STR: &str = "3.141592653589793238462643383279502884197";
 
 // Constants for doing lattice sums. Non-obvious
 // numerical values computed through Mathematica 11.2.0
@@ -33,6 +40,23 @@ const Y_HEX_1: f64 = 0.0;
 const X_HEX_2: f64 = 0.5;
 const Y_HEX_2: f64 = 0.866025403784439;
 
+const AP_PREC: u32 = 100; // precision for arbitrary precision calculation
+
+// Constants for doing lattice sums, with 40 digit precision. Non-obvious
+// numerical values computed through Mathematica 11.2.0
+const AP_Z_OFFSET: &str = "0.8164965809277260327324280249019637973220";
+
+const AP_X_OFFSET_B: &str = "0.5";
+const AP_Y_OFFSET_B: &str = "0.2886751345948128822545743902509787278238";
+
+const AP_X_OFFSET_C: &str = "-0.5";
+const AP_Y_OFFSET_C: &str = "-0.2886751345948128822545743902509787278238";
+
+const AP_X_HEX_1: &str = "1.0";
+const AP_Y_HEX_1: &str = "0.0";
+const AP_X_HEX_2: &str = "0.5";
+const AP_Y_HEX_2: &str = "0.8660254037844386467637231707529361834714";
+
 // lazy_static declarations of useful vectors
 lazy_static! {
     static ref OFFSET_ALL: Vector3<f64> = Vector3::new(0.0, 0.0, Z_OFFSET);
@@ -40,6 +64,13 @@ lazy_static! {
     static ref OFFSET_C: Vector3<f64> = Vector3::new(X_OFFSET_C, Y_OFFSET_C, 0.0);
     static ref HEX_1: Vector3<f64> = Vector3::new(X_HEX_1, Y_HEX_1, 0.0);
     static ref HEX_2: Vector3<f64> = Vector3::new(X_HEX_2, Y_HEX_2, 0.0);
+
+    // Used in arbitrary precision versions of methods
+    static ref AP_OFFSET_ALL: APVec3 = APVec3::parse("0.0", "0.0", AP_Z_OFFSET, AP_PREC);
+    static ref AP_OFFSET_B: APVec3 = APVec3::parse(AP_X_OFFSET_B, AP_Y_OFFSET_B, "0.0", AP_PREC);
+    static ref AP_OFFSET_C: APVec3 = APVec3::parse(AP_X_OFFSET_C, AP_Y_OFFSET_C, "0.0", AP_PREC);
+    static ref AP_HEX_1: APVec3 = APVec3::parse(AP_X_HEX_1, AP_Y_HEX_1, "0.0", AP_PREC);
+    static ref AP_HEX_2: APVec3 = APVec3::parse(AP_X_HEX_2, AP_Y_HEX_2, "0.0", AP_PREC);
 }
 
 // StructOpt derivation is based on Github sample code for structopt
@@ -74,6 +105,10 @@ pub struct Opt {
     ///Convergence parameter for hyperuniformity B coefficient
     #[structopt(short = "a", long = "alpha")]
     pub alpha: Option<f64>,
+
+    ///Convergence parameter for AP h integral and B coeff
+    #[structopt(short= "s", long = "alphastr")]
+    pub alpha_str: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -474,6 +509,136 @@ pub fn compute_h(spec: Spec, opt: &Opt) {
 
     // account for the -1 in the definition of h
     h -= 2.0f64.sqrt()*PI.powf(1.5)/alpha.powf(1.5);
+
+    println!("h = {}", h);
+
+}
+
+pub fn ap_h_hex(
+    layer_pos: Layer, // A B or C
+    layer_neg: Layer,
+    l_idx: i32, //How many layers above or below center are we?
+    max_lat_idx: i32, //How far are we going out in lattice sum?
+    alpha: &Float //exponential convergence parameter
+    ) -> Float
+{
+    use Layer::*;
+    
+    let offset_pos = match layer_pos {
+        A => l_idx * AP_OFFSET_ALL.clone(),
+        B => l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_B,
+        C => l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_C,
+    };
+    
+    let offset_neg = match layer_neg {
+        A => -l_idx * AP_OFFSET_ALL.clone(),
+        B => -l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_B,
+        C => -l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_C,
+    };
+
+    let mut h: Float = Float::with_val(AP_PREC, 0);
+
+    for i in (0..(max_lat_idx + 1)).rev() {
+        for j in (0..(max_lat_idx + 1)).rev() {
+            // +++
+            let vec = &offset_pos + i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
+            let r: Float = vec.norm();
+            h += (-(alpha*r.square())).exp();
+            // ++-
+            if j != 0 {
+                let vec = &offset_pos + i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // +-+
+            if i != 0 {
+                let vec = &offset_pos - i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // +--
+            if (i != 0) && (j != 0) {
+                let vec = &offset_pos - i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // -++
+            if l_idx != 0 {
+                let vec = &offset_neg + i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // -+-
+            if (l_idx != 0) && (j != 0) {
+                let vec = &offset_neg + i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // --+
+            if (l_idx != 0) && (i != 0) {
+                let vec = &offset_neg - i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+            // ---
+            if (l_idx != 0) && (i != 0) && (j != 0) {
+                let vec = &offset_neg - i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
+                let r: Float = vec.norm();
+                h += (-(alpha*r.square())).exp();
+            }
+        }
+    }
+    h
+}
+
+
+pub fn ap_compute_h(spec: Spec, opt: &Opt) {
+    // this passes borrow checker thanks to
+    // https://users.rust-lang.org/t/cannot-move-out-of-borrowed-context-access-struct-field/1700
+    let alpha_str = opt.alpha_str.as_ref().expect("Must supply convergence parameter");
+    let alpha = Float::with_val(AP_PREC, 
+                                Float::parse(alpha_str)
+                                .expect("Invalid float spec for alpha_str"));
+
+    let max_lat_idx = (2.0*opt.cutoff) as i32;
+
+    let spec_len = spec.len();
+    let spec_i32 = spec_len as i32;
+
+    let mut h: Float = Float::with_val(AP_PREC, 0); //integral of h over R3
+
+    for i in 0..spec_len {
+        println!("Working on particle type: {}", i);
+        let curr_spec = spec.shift(i);
+        let temp: Vec<Float> = (0..(max_lat_idx + 1)).rev()
+            .collect::<Vec<i32>>()
+            .par_iter()
+            .map(|&j| ap_h_hex(
+                curr_spec.get((((j%spec_i32)+spec_i32)%spec_i32) as usize),
+                curr_spec.get((((-j%spec_i32)+spec_i32)%spec_i32) as usize),
+                j,
+                max_lat_idx,
+                &alpha
+                )
+            )
+            .collect();
+        h += Float::with_val(AP_PREC, Float::sum(temp.iter()));
+    }
+
+    println!("h is {}", h);
+    
+    // normalize by # of particle types
+    h /= Float::with_val(AP_PREC, spec_len);
+   
+    // must subtract off origin contribution, not zeroed by inclusion
+    // of r anymore
+    h -= Float::with_val(AP_PREC, 1);
+
+    // account for the -1 in the definition of h
+    h -= Float::with_val(AP_PREC, 2).sqrt()
+        *Float::with_val(AP_PREC, Float::parse(PI_STR).unwrap())
+        .pow(Float::with_val(AP_PREC, Float::parse("1.5").unwrap()))
+        /alpha.pow(Float::with_val(AP_PREC, Float::parse("1.5").unwrap()));
 
     println!("h = {}", h);
 
