@@ -15,7 +15,8 @@ use std::fs::File;
 use na::Vector3;
 use rayon::prelude::*;
 use std::f64::consts::PI;
-use rug::Float;
+use std::ops::MulAssign;
+use rug::{Float, Assign};
 use rug::ops::Pow;
 use geometry::APVec3;
 
@@ -40,7 +41,7 @@ const Y_HEX_1: f64 = 0.0;
 const X_HEX_2: f64 = 0.5;
 const Y_HEX_2: f64 = 0.866025403784439;
 
-const AP_PREC: u32 = 100; // precision for arbitrary precision calculation
+const AP_PREC: u32 = 128; // precision for arbitrary precision calculation
 
 // Constants for doing lattice sums, with 40 digit precision. Non-obvious
 // numerical values computed through Mathematica 11.2.0
@@ -109,6 +110,10 @@ pub struct Opt {
     ///Convergence parameter for AP h integral and B coeff
     #[structopt(short= "s", long = "alphastr")]
     pub alpha_str: Option<String>,
+
+    ///Verbosity level, useful for knowing run time
+    #[structopt(short = "v", long = "verbose")]
+    pub verbose: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -519,10 +524,15 @@ pub fn ap_h_hex(
     layer_neg: Layer,
     l_idx: i32, //How many layers above or below center are we?
     max_lat_idx: i32, //How far are we going out in lattice sum?
-    alpha: &Float //exponential convergence parameter
+    alpha: &Float, //exponential convergence parameter
+    opt: &Opt
     ) -> Float
 {
     use Layer::*;
+    
+    if opt.verbose {
+        println!("Working on l_idx: {}", l_idx);
+    }
     
     let offset_pos = match layer_pos {
         A => l_idx * AP_OFFSET_ALL.clone(),
@@ -537,54 +547,112 @@ pub fn ap_h_hex(
     };
 
     let mut h: Float = Float::with_val(AP_PREC, 0);
+    let mut r: Float = Float::with_val(AP_PREC, 0);
+    let mut vec = APVec3::new(0.0, 0.0, 0.0, AP_PREC);
+    let mut buffer = APVec3::new(0.0, 0.0, 0.0, AP_PREC);
 
     for i in (0..(max_lat_idx + 1)).rev() {
         for j in (0..(max_lat_idx + 1)).rev() {
             // +++
-            let vec = &offset_pos + i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
-            let r: Float = vec.norm();
-            h += (-(alpha*r.square())).exp();
+            vec.assign(&offset_pos);
+            buffer.scalar_mul_assign(i, &*AP_HEX_1);
+            vec += &buffer; 
+            buffer.scalar_mul_assign(j, &*AP_HEX_2);
+            vec += &buffer;
+            vec.norm_mut(&mut r);
+            r.square_mut();
+            r = (-(alpha*r)).exp();
+            h += &r;
+            
             // ++-
             if j != 0 {
-                let vec = &offset_pos + i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // +-+
             if i != 0 {
-                let vec = &offset_pos - i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // +--
             if (i != 0) && (j != 0) {
-                let vec = &offset_pos - i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // -++
             if l_idx != 0 {
-                let vec = &offset_neg + i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // -+-
             if (l_idx != 0) && (j != 0) {
-                let vec = &offset_neg + i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // --+
             if (l_idx != 0) && (i != 0) {
-                let vec = &offset_neg - i * AP_HEX_1.clone() + j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
+            
             // ---
             if (l_idx != 0) && (i != 0) && (j != 0) {
-                let vec = &offset_neg - i * AP_HEX_1.clone() - j * AP_HEX_2.clone();
-                let r: Float = vec.norm();
-                h += (-(alpha*r.square())).exp();
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                r.square_mut();
+                r = (-(alpha*r)).exp();
+                h += &r;
             }
         }
     }
@@ -618,7 +686,8 @@ pub fn ap_compute_h(spec: Spec, opt: &Opt) {
                 curr_spec.get((((-j%spec_i32)+spec_i32)%spec_i32) as usize),
                 j,
                 max_lat_idx,
-                &alpha
+                &alpha,
+                opt
                 )
             )
             .collect();
@@ -639,6 +708,198 @@ pub fn ap_compute_h(spec: Spec, opt: &Opt) {
         *Float::with_val(AP_PREC, Float::parse(PI_STR).unwrap())
         .pow(Float::with_val(AP_PREC, Float::parse("1.5").unwrap()))
         /alpha.pow(Float::with_val(AP_PREC, Float::parse("1.5").unwrap()));
+
+    println!("h = {}", h);
+
+}
+
+pub fn ap_hyper_hex(
+    layer_pos: Layer, // A B or C
+    layer_neg: Layer,
+    l_idx: i32, //How many layers above or below center are we?
+    max_lat_idx: i32, //How far are we going out in lattice sum?
+    alpha: &Float, //exponential convergence parameter
+    opt: &Opt
+    ) -> Float
+{
+    use Layer::*;
+    
+    if opt.verbose {
+        println!("Working on l_idx: {}", l_idx);
+    }
+
+    let offset_pos = match layer_pos {
+        A => l_idx * AP_OFFSET_ALL.clone(),
+        B => l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_B,
+        C => l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_C,
+    };
+    
+    let offset_neg = match layer_neg {
+        A => -l_idx * AP_OFFSET_ALL.clone(),
+        B => -l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_B,
+        C => -l_idx * AP_OFFSET_ALL.clone() + &*AP_OFFSET_C,
+    };
+
+    let mut h: Float = Float::with_val(AP_PREC, 0); //buffer for collecting integral contributions
+    let mut r: Float = Float::with_val(AP_PREC, 0); //buffer for radius calc
+    let mut ans: Float = Float::with_val(AP_PREC, 0); //buffer for composing contribution of layer to int
+    let mut vec = APVec3::new(0.0, 0.0, 0.0, AP_PREC); //buffer for building lattice vector
+    let mut buffer = APVec3::new(0.0, 0.0, 0.0, AP_PREC); //buffer for scalar multiple calcs
+
+    for i in (0..(max_lat_idx + 1)) {
+        for j in (0..(max_lat_idx + 1)) {
+            // +++
+            vec.assign(&offset_pos);
+            buffer.scalar_mul_assign(i, &*AP_HEX_1);
+            vec += &buffer; 
+            buffer.scalar_mul_assign(j, &*AP_HEX_2);
+            vec += &buffer;
+            vec.norm_mut(&mut r);
+            ans.assign(r.square_ref());
+            ans = (&r)*(-(alpha*ans)).exp();
+            h += &ans;
+            
+            // ++-
+            if j != 0 {
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // +-+
+            if i != 0 {
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // +--
+            if (i != 0) && (j != 0) {
+                vec.assign(&offset_pos);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // -++
+            if l_idx != 0 {
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // -+-
+            if (l_idx != 0) && (j != 0) {
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // --+
+            if (l_idx != 0) && (i != 0) {
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+            
+            // ---
+            if (l_idx != 0) && (i != 0) && (j != 0) {
+                vec.assign(&offset_neg);
+                buffer.scalar_mul_assign(-i, &*AP_HEX_1);
+                vec += &buffer; 
+                buffer.scalar_mul_assign(-j, &*AP_HEX_2);
+                vec += &buffer;
+                vec.norm_mut(&mut r);
+                ans.assign(r.square_ref());
+                ans = (&r)*(-(alpha*ans)).exp();
+                h += &ans;
+            }
+        }
+    }
+    h
+}
+
+
+pub fn ap_compute_hyper(spec: Spec, opt: &Opt) {
+    // this passes borrow checker thanks to
+    // https://users.rust-lang.org/t/cannot-move-out-of-borrowed-context-access-struct-field/1700
+    let alpha_str = opt.alpha_str.as_ref().expect("Must supply convergence parameter");
+    let alpha = Float::with_val(AP_PREC, 
+                                Float::parse(alpha_str)
+                                .expect("Invalid float spec for alpha_str"));
+
+    let max_lat_idx = (2.0*opt.cutoff) as i32;
+
+    let spec_len = spec.len();
+    let spec_i32 = spec_len as i32;
+
+    let mut h: Float = Float::with_val(AP_PREC, 0); //integral of h over R3
+
+    for i in 0..spec_len {
+        println!("Working on particle type: {}", i);
+        let curr_spec = spec.shift(i);
+        let temp: Vec<Float> = (0..(max_lat_idx + 1))
+            .collect::<Vec<i32>>()
+            .par_iter()
+            .map(|&j| ap_hyper_hex(
+                curr_spec.get((((j%spec_i32)+spec_i32)%spec_i32) as usize),
+                curr_spec.get((((-j%spec_i32)+spec_i32)%spec_i32) as usize),
+                j,
+                max_lat_idx,
+                &alpha,
+                opt
+                )
+            )
+            .collect();
+        h += Float::with_val(AP_PREC, Float::sum(temp.iter()));
+    }
+
+    println!("h is {}", h);
+    
+    // normalize by # of particle types
+    h /= Float::with_val(AP_PREC, spec_len);
+
+    // account for the -1 in the definition of h
+    h -= Float::with_val(AP_PREC, 4)
+        *Float::with_val(AP_PREC, Float::parse(PI_STR).unwrap())
+        *(Float::with_val(AP_PREC, 2).sqrt())
+        /(Float::with_val(AP_PREC, 2)*alpha.clone()*alpha.clone());
+
 
     println!("h = {}", h);
 

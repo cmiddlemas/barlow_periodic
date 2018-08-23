@@ -1,5 +1,5 @@
-use rug::{Float};
-use std::ops::{Add, Mul, Neg, Sub};
+use rug::{Float, Assign};
+use std::ops::{Add, Mul, Neg, Sub, AddAssign};
 
 // Using rug type signatures, rust book and rust by example throughout
 // as guide
@@ -25,6 +25,18 @@ impl APVec3 {
         }
     }
 
+    pub fn assign(&mut self, vec: &APVec3) {
+        self.x.assign(&vec.x);
+        self.y.assign(&vec.y);
+        self.z.assign(&vec.z);
+    }
+
+    pub fn scalar_mul_assign(&mut self, scalar: i32, vec: &APVec3) {
+        self.x.assign(scalar * &vec.x);
+        self.y.assign(scalar * &vec.y);
+        self.z.assign(scalar * &vec.z);
+    }
+
     pub fn parse(x: &str, y: &str, z: &str, prec: u32) -> APVec3 {
         APVec3 {
             x: Float::with_val(prec, Float::parse(x).unwrap()),
@@ -39,6 +51,12 @@ impl APVec3 {
         result += Float::with_val(prec, &self.z * &self.z);
         result.sqrt_mut();
         result
+    }
+
+    pub fn norm_mut(&self, result: &mut Float) {
+        result.assign(&self.x * &self.x + &self.y * &self.y);
+        result.add_assign(&self.z * &self.z);
+        result.sqrt_mut();
     }
 
 }
@@ -164,5 +182,13 @@ impl<'a> Sub<APVec3> for &'a APVec3 {
         rhs.y = &self.y - rhs.y;
         rhs.z = &self.z - rhs.z;
         rhs
+    }
+}
+
+impl<'a> AddAssign<&'a APVec3> for APVec3 {
+    fn add_assign(&mut self, rhs: &APVec3) {
+        self.x += &rhs.x;
+        self.y += &rhs.y;
+        self.z += &rhs.z;
     }
 }
