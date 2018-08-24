@@ -1,15 +1,25 @@
 extern crate barlow_periodic;
 extern crate structopt;
+extern crate chrono;
 
 use barlow_periodic::*;
 
 use std::fs::File;
 use std::io::prelude::*;
 use structopt::StructOpt;
+use chrono::prelude::*;
 
 fn main() {
+
+    // From the chrono docs, heard about chrono from
+    // rust reddit and stackoverflow
+    // was originally using std::time, with
+    // associated docs as reference
+    println!("Starting at time: {}", Utc::now());
     
     let opt = Opt::from_args();
+
+    println!("Got argument struct : {:?}", opt);
     
     println!("Parsing Barlow strings from {:?}", opt.input);
     
@@ -31,5 +41,8 @@ fn main() {
             _ => panic!("Invalid request, or not implemented."),
         }
     }
+    
+    // same as above
+    println!("Exiting at time: {}", Utc::now());
 
 }
