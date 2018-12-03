@@ -298,8 +298,8 @@ pub fn hyper_hex(
 
     let mut b: f64 = 0.0;
 
-    for i in (0..(max_lat_idx + 1)).rev() {
-        for j in (0..(max_lat_idx + 1)).rev() {
+    for i in (0..(max_lat_idx + 1)) {
+        for j in (0..(max_lat_idx + 1)) {
             // +++
             let vec = offset_pos + (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
             let r: f64 = na::norm(&vec);
@@ -366,7 +366,7 @@ pub fn compute_hyperuniformity(spec: Spec, opt: &Opt) {
     for i in 0..spec_len {
         println!("Working on particle type: {}", i);
         let curr_spec = spec.shift(i);
-        let temp_vec: Vec<f64> = (0..(max_lat_idx + 1)).rev()
+        let temp_vec: Vec<f64> = (0..(max_lat_idx + 1))
             .collect::<Vec<i64>>()
             .par_iter()
             .map(|&j| hyper_hex(
@@ -419,8 +419,8 @@ pub fn h_hex(
 
     let mut h: f64 = 0.0;
 
-    for i in (0..(max_lat_idx + 1)).rev() {
-        for j in (0..(max_lat_idx + 1)).rev() {
+    for i in (0..(max_lat_idx + 1)) {
+        for j in (0..(max_lat_idx + 1)) {
             // +++
             let vec = offset_pos + (i as f64) * *HEX_1 + (j as f64) * *HEX_2;
             let r: f64 = na::norm(&vec);
@@ -487,7 +487,7 @@ pub fn compute_h(spec: Spec, opt: &Opt) {
     for i in 0..spec_len {
         println!("Working on particle type: {}", i);
         let curr_spec = spec.shift(i);
-        let temp: Vec<f64> = (0..(max_lat_idx + 1)).rev()
+        let temp: Vec<f64> = (0..(max_lat_idx + 1))
             .collect::<Vec<i64>>()
             .par_iter()
             .map(|&j| h_hex(
@@ -550,8 +550,8 @@ pub fn ap_h_hex(
     let mut vec = APVec3::new(0.0, 0.0, 0.0, AP_PREC);
     let mut buffer = APVec3::new(0.0, 0.0, 0.0, AP_PREC);
 
-    for i in (0..(max_lat_idx + 1)).rev() {
-        for j in (0..(max_lat_idx + 1)).rev() {
+    for i in (0..(max_lat_idx + 1)) {
+        for j in (0..(max_lat_idx + 1)) {
             // +++
             vec.assign(&offset_pos);
             buffer.scalar_mul_assign(i, &*AP_HEX_1);
@@ -677,7 +677,7 @@ pub fn ap_compute_h(spec: Spec, opt: &Opt) {
     for i in 0..spec_len {
         println!("Working on particle type: {}", i);
         let curr_spec = spec.shift(i);
-        let temp: Vec<Float> = (0..(max_lat_idx + 1)).rev()
+        let temp: Vec<Float> = (0..(max_lat_idx + 1))
             .collect::<Vec<i32>>()
             .par_iter()
             .map(|&j| ap_h_hex(
@@ -745,8 +745,8 @@ pub fn ap_hyper_hex(
     let mut vec = APVec3::new(0.0, 0.0, 0.0, AP_PREC); //buffer for building lattice vector
     let mut buffer = APVec3::new(0.0, 0.0, 0.0, AP_PREC); //buffer for scalar multiple calcs
 
-    for i in (0..(max_lat_idx + 1)).rev() {
-        for j in (0..(max_lat_idx + 1)).rev() {
+    for i in (0..(max_lat_idx + 1)) {
+        for j in (0..(max_lat_idx + 1)) {
             // +++
             vec.assign(&offset_pos);
             buffer.scalar_mul_assign(i, &*AP_HEX_1);
@@ -872,7 +872,7 @@ pub fn ap_compute_hyper(spec: Spec, opt: &Opt) {
     for i in 0..spec_len {
         println!("Working on particle type: {}", i);
         let curr_spec = spec.shift(i);
-        let temp: Vec<Float> = (0..(max_lat_idx + 1)).rev()
+        let temp: Vec<Float> = (0..(max_lat_idx + 1))
             .collect::<Vec<i32>>()
             .par_iter()
             .map(|&j| ap_hyper_hex(
